@@ -1,0 +1,124 @@
+{
+  "name": "LDAP User Provisioning Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "IT Onboarding Form",
+        "formDescription": "Standardized form for Active Directory user creation",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Country",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "France" },
+                  { "option": "USA" }
+                ]
+              }
+            },
+            { "fieldLabel": "First Name" },
+            { "fieldLabel": "Last Name" },
+            { "fieldLabel": "Personal Email" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [1616, -80],
+      "id": "1480c707-c3d4-4b23-bd4e-e48559376b73",
+      "name": "On form submission"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9f08bfd2-a153-4844-8190-58e96217657e",
+              "name": "identifiant",
+              "value": "={{ $json[\"Last Name\"].toLowerCase() }}{{ $json[\"First Name\"][0].toLowerCase() }}",
+              "type": "string"
+            },
+            {
+              "id": "7852b063-5847-4d52-939d-aabf9fefd42f",
+              "name": "chemin_ou",
+              "value": "=OU={{ $json[\"Country\"] }},OU=Users,DC=company,DC=com",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1856, -80],
+      "id": "9994b931-6e08-4fa0-8fc1-2c985c81e698",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "dn": "=CN={{ $json[\"First Name\"] }} {{ $json[\"Last Name\"] }},{{ $json[\"chemin_ou\"] }}",
+        "attributes": {
+          "attribute": [
+            {
+              "id": "objectClass",
+              "value": "={{ [\"top\", \"person\", \"organizationalPerson\", \"user\"] }}"
+            },
+            {
+              "id": "sAMAccountName",
+              "value": "={{ $json[\"identifiant\"] }}"
+            },
+            {
+              "id": "userPrincipalName",
+              "value": "={{ $json[\"identifiant\"] }}@company.com"
+            },
+            {
+              "id": "userAccountControl",
+              "value": "512"
+            },
+            {
+              "id": "unicodePwd",
+              "value": "={{ $json.unicodePwd }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.ldap",
+      "typeVersion": 1,
+      "position": [2288, -80],
+      "id": "62daa14f-cb5a-4982-907c-e18269706449",
+      "name": "LDAP"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Generate secure binary password for AD\nconst rawPassword = \"REPLACE_WITH_YOUR_SECURE_PASSWORD\"; \nconst quotedPassword = `\"${rawPassword}\"`;\nconst buffer = Buffer.from(quotedPassword, 'utf16le');\n\nfor (const item of $input.all()) {\n  item.json.unicodePwd = buffer.toString('binary');\n  item.json.userAccountControl = 512;\n\n  const prenom = item.json[\"First Name\"] || \"\";\n  const nom = item.json[\"Last Name\"] || \"\";\n  item.json.identifiant = `${prenom.charAt(0).toLowerCase()}.${nom.toLowerCase()}`;\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2080, -80],
+      "id": "f46bb693-bf5d-440d-b244-6c2556557c36",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "fromEmail": "notifications@company.com",
+        "toEmail": "admin@company.com",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2496, -80],
+      "id": "53ce9024-e594-4980-ac57-5183381799f4",
+      "name": "Send Confirmation Email"
+    }
+  ],
+  "connections": {
+    "On form submission": { "main": [[{ "node": "Edit Fields", "type": "main", "index": 0 }]] },
+    "Edit Fields": { "main": [[{ "node": "Code in JavaScript", "type": "main", "index": 0 }]] },
+    "Code in JavaScript": { "main": [[{ "node": "LDAP", "type": "main", "index": 0 }]] },
+    "LDAP": { "main": [[{ "node": "Send Confirmation Email", "type": "main", "index": 0 }]] }
+  }
+}
